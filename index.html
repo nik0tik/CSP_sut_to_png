@@ -3,66 +3,92 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Извлечение картинок из кистей CSP</title>
-<style>
-  :root { color-scheme: light dark; }
-  body { font: 16px/1.5 system-ui, sans-serif; max-width: 700px;
-         margin: 40px auto; padding: 0 16px; }
-  h1 { font-size: 1.4rem; margin-bottom: .3em; }
-  .muted { opacity: .75; font-size: 14px; }
-  #drop { border: 2px dashed #888; border-radius: 12px; padding: 40px 20px;
-          text-align: center; margin: 24px 0; transition: background .15s; }
-  #drop.over { border-color: #2a7; background: rgba(34,170,119,.1); }
-  button { font: inherit; padding: 10px 18px; border-radius: 8px;
-           border: 1px solid #888; background: transparent; cursor: pointer; }
-  button:disabled { opacity: .45; cursor: default; }
-  button:focus-visible { outline: 3px solid #2a7; outline-offset: 2px; }
-  .opts { display: flex; gap: 20px; flex-wrap: wrap; font-size: 14px;
-          align-items: center; }
-  .actions { display: flex; gap: 10px; flex-wrap: wrap; margin: 20px 0; }
-  #log { font: 13px/1.45 ui-monospace, monospace; white-space: pre-wrap;
-         max-height: 340px; overflow: auto; border-top: 1px solid #8884;
-         padding-top: 12px; margin-top: 8px; }
-</style>
+<title>Извлечение картинок из кистей Clip Studio Paint</title>
+<link rel="stylesheet" href="styles.css">
 </head>
 <body>
+<div class="wrap">
 
-<h1>Извлечение картинок из кистей Clip Studio Paint</h1>
-<p class="muted">Ничего не загружается на сервер — весь разбор идёт в вашем
-браузере. Каждая кисть получает отдельную подпапку с PNG.</p>
+  <header class="head">
+    <span class="badge">Сделано Nikotik</span>
+    <h1>Картинки из кистей Clip Studio Paint</h1>
+    <p>Перетащите папку с файлами <code>.sut</code> — каждая кисть получит
+       отдельную подпапку с PNG.</p>
+  </header>
 
-<div id="drop">
-  <p>Перетащите сюда папку с файлами <code>.sut</code></p>
-  <button id="pick" type="button">Выбрать папку</button>
-  <input id="input" type="file" webkitdirectory multiple hidden>
+  <div id="drop">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+      <path d="M12 11v6"/><path d="M9.5 13.5 12 11l2.5 2.5"/>
+    </svg>
+    <p class="title">Перетащите папку сюда</p>
+    <p class="hint">или выберите её вручную</p>
+    <button id="pick" type="button" class="primary">Выбрать папку</button>
+    <input id="input" type="file" webkitdirectory multiple hidden>
+  </div>
+
+  <section class="panel">
+    <div class="opts">
+      <label>
+        <input id="deep" type="checkbox">
+        искать во всех таблицах
+      </label>
+      <label>
+        пропускать меньше
+        <input id="min" type="number" value="0" min="0" max="4096" step="8">
+        px
+      </label>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div id="progressWrap" hidden>
+      <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100"
+           aria-valuenow="0" aria-label="Обработка кистей">
+        <span id="bar"></span>
+      </div>
+    </div>
+
+    <p id="status" role="status" aria-live="polite">Готово к работе.</p>
+
+    <ul id="stats" hidden></ul>
+
+    <div id="preview" hidden>
+      <h2 id="previewTitle">Превью</h2>
+      <div class="grid" id="grid"></div>
+    </div>
+
+    <div class="actions">
+      <button id="save" type="button" class="primary" disabled>Сохранить в папку…</button>
+      <button id="zip" type="button" disabled>Скачать ZIP</button>
+    </div>
+
+    <details class="log">
+      <summary>Подробный отчёт</summary>
+      <pre id="log"></pre>
+    </details>
+  </section>
+
+  <p class="foot">Разбор идёт целиком в браузере. Файлы кистей не изменяются.</p>
+
 </div>
-
-<div class="opts">
-  <label><input id="deep" type="checkbox"> искать во всех таблицах</label>
-  <label>пропускать меньше
-    <input id="min" type="number" value="0" min="0" max="4096" style="width:5em">
-    px</label>
-</div>
-
-<div class="actions">
-  <button id="save" type="button" disabled>Сохранить в папку…</button>
-  <button id="zip" type="button" disabled>Скачать ZIP</button>
-</div>
-
-<div id="log" role="log" aria-live="polite"></div>
 
 <script src="vendor/sql-wasm.js"></script>
 <script>
 const WASM_DIR = "vendor/";
 const PNG_SIG = [0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a];
+const PREVIEW_LIMIT = 24;
 
-const logBox = document.getElementById("log");
-const saveBtn = document.getElementById("save");
-const zipBtn = document.getElementById("zip");
-const drop = document.getElementById("drop");
-const input = document.getElementById("input");
+const el = (id) => document.getElementById(id);
+const logBox = el("log"), statusBox = el("status"), bar = el("bar");
+const progressWrap = el("progressWrap"), statsBox = el("stats");
+const previewBox = el("preview"), grid = el("grid"), previewTitle = el("previewTitle");
+const saveBtn = el("save"), zipBtn = el("zip");
+const drop = el("drop"), input = el("input");
 
-let result = null;      // [{path, bytes}]
+let result = null;          // [{path, bytes}]
+let previewUrls = [];
 let rootName = "brushes";
 let busy = false;
 
@@ -70,6 +96,18 @@ const log = (text = "") => {
   logBox.textContent += text + "\n";
   logBox.scrollTop = logBox.scrollHeight;
 };
+
+function setStatus(text, kind = "") {
+  statusBox.textContent = text;
+  statusBox.className = kind;
+}
+
+function setProgress(done, total) {
+  const percent = total ? Math.round(done / total * 100) : 0;
+  bar.style.width = percent + "%";
+  progressWrap.firstElementChild.setAttribute("aria-valuenow", String(percent));
+}
+
 const breathe = () => new Promise(r => setTimeout(r, 0));
 
 /* ------------------------------------------------- разбор PNG по чанкам ---- */
@@ -271,43 +309,99 @@ async function walk(entry, out) {
   }
 }
 
+/* ------------------------------------------------- вывод результата -------- */
+function renderStats(items) {
+  statsBox.innerHTML = "";
+  for (const [value, label] of items) {
+    const li = document.createElement("li");
+    const b = document.createElement("b");
+    b.textContent = String(value);
+    const span = document.createElement("span");
+    span.textContent = label;
+    li.append(b, span);
+    statsBox.append(li);
+  }
+  statsBox.hidden = !items.length;
+}
+
+function clearPreview() {
+  previewUrls.forEach(URL.revokeObjectURL);
+  previewUrls = [];
+  grid.innerHTML = "";
+  previewBox.hidden = true;
+}
+
+function renderPreview(entries) {
+  clearPreview();
+  const shown = entries.slice(0, PREVIEW_LIMIT);
+  for (const entry of shown) {
+    const url = URL.createObjectURL(new Blob([entry.bytes], { type: "image/png" }));
+    previewUrls.push(url);
+    const img = document.createElement("img");
+    img.src = url;
+    img.loading = "lazy";
+    img.alt = entry.path.split("/").slice(-2).join(" / ");
+    img.title = img.alt;
+    grid.append(img);
+  }
+  previewTitle.textContent = entries.length > shown.length
+    ? `Превью — первые ${shown.length} из ${entries.length}`
+    : `Превью — ${shown.length}`;
+  previewBox.hidden = !shown.length;
+}
+
 /* ------------------------------------------------- основной проход --------- */
 async function run(files) {
   if (busy) return;
   busy = true;
+  drop.classList.add("busy");
   logBox.textContent = "";
   result = null;
   saveBtn.disabled = true;
   zipBtn.disabled = true;
+  renderStats([]);
+  clearPreview();
 
   try {
     const suts = files.filter(f => /\.sut$/i.test(f.name));
-    if (!suts.length) { log("Файлы .sut не найдены."); return; }
-
-    const deep = document.getElementById("deep").checked;
-    const minSide = Number(document.getElementById("min").value) || 0;
-    log(`Найдено кистей: ${suts.length}`);
-    log(`Режим: ${deep ? "все таблицы" : "только наконечники (MaterialFile)"}`);
-    if (minSide) log(`Пропуск картинок меньше ${minSide} px`);
-    log();
-
-    if (typeof initSqlJs !== "function") {
-      log("Движок sql.js не загрузился.");
-      log("Проверьте, что рядом с index.html лежит vendor/sql-wasm.js");
+    if (!suts.length) {
+      setStatus("Файлы .sut не найдены. Проверьте, что выбрана нужная папка.", "error");
       return;
     }
+
+    const deep = el("deep").checked;
+    const minSide = Number(el("min").value) || 0;
+
+    if (typeof initSqlJs !== "function") {
+      setStatus("Движок sql.js не загрузился.", "error");
+      log("Проверьте, что рядом с index.html лежит папка vendor");
+      log("с файлами sql-wasm.js и sql-wasm.wasm.");
+      return;
+    }
+
+    setStatus("Готовим движок…");
+    progressWrap.hidden = false;
+    setProgress(0, suts.length);
+    await breathe();
+
     let SQL;
     try {
       SQL = await initSqlJs({ locateFile: (f) => WASM_DIR + f });
     } catch (e) {
-      log(`Не удалось запустить sql.js: ${e.message}`);
+      setStatus("Не удалось запустить sql.js.", "error");
+      log(e.message);
       log("Если открыли index.html двойным кликом — так не работает,");
       log("страницу нужно открывать по адресу сайта.");
       return;
     }
 
+    log(`Найдено кистей: ${suts.length}`);
+    if (minSide) log(`Пропуск картинок меньше ${minSide} px`);
+    log();
+
     const out = [], usedDirs = new Set();
     let total = 0, empty = 0, skippedAll = 0, failed = 0;
+    const step = suts.length > 150 ? 5 : 1;
 
     for (let i = 0; i < suts.length; i++) {
       const file = suts[i];
@@ -322,6 +416,7 @@ async function run(files) {
         continue;
       }
       skippedAll += skipped;
+
       if (!images.length) {
         empty++;
         log(`${label} — картинок нет${skipped ? ` (отсеяно: ${skipped})` : ""}`);
@@ -330,13 +425,21 @@ async function run(files) {
         const folder = uniqueName(stem, usedDirs);
         images.forEach((png, index) => {
           const name = images.length === 1 ? `${stem}.png` : `${stem}_${index + 1}.png`;
-          out.push({ path: `${rootName}_extracted/${folder}/${name}`, bytes: png.bytes });
+          out.push({
+            path: `${rootName}_extracted/${folder}/${name}`,
+            bytes: png.bytes.slice()      // копия, чтобы отпустить буфер файла
+          });
         });
         total += images.length;
         log(`${label} — ${images.length} шт. ` +
             `[${images.map(p => p.width + "x" + p.height).join(", ")}]`);
       }
-      if (i % 5 === 4) await breathe();    // чтобы лог обновлялся на ходу
+
+      setProgress(i + 1, suts.length);
+      if (i % step === step - 1) {
+        setStatus(`Обработано ${i + 1} из ${suts.length}…`);
+        await breathe();
+      }
     }
 
     log("\n" + "-".repeat(46));
@@ -345,25 +448,39 @@ async function run(files) {
     if (empty) log(`Без картинок:       ${empty}`);
     if (skippedAll) log(`Отсеяно по размеру: ${skippedAll}`);
     if (failed) log(`С ошибками:         ${failed}`);
-    if (!total) return;
+
+    const stats = [[total, "картинок"], [suts.length - empty - failed, "кистей"]];
+    if (empty) stats.push([empty, "без картинок"]);
+    if (skippedAll) stats.push([skippedAll, "отсеяно"]);
+    if (failed) stats.push([failed, "с ошибками"]);
+    renderStats(stats);
+
+    if (!total) {
+      setStatus("Картинок не нашлось. Попробуйте включить поиск во всех таблицах.", "error");
+      return;
+    }
 
     result = out;
+    renderPreview(out);
     zipBtn.disabled = false;
+
     if (window.showDirectoryPicker) {
       saveBtn.disabled = false;
-      log('\nГотово. Нажмите "Сохранить в папку…" или "Скачать ZIP".');
+      setStatus(`Готово: ${total} картинок в ${usedDirs.size} папках.`, "done");
     } else {
-      log("\nЗапись прямо на диск есть в Chrome и Edge.");
-      log('Здесь доступен "Скачать ZIP" — структура папок внутри та же.');
+      setStatus(`Готово: ${total} картинок. Скачайте ZIP — папки внутри те же.`, "done");
+      log("\nЗапись прямо на диск доступна в Chrome и Edge.");
     }
   } finally {
     busy = false;
+    drop.classList.remove("busy");
   }
 }
 
 /* ------------------------------------------------- сохранение -------------- */
 saveBtn.onclick = async () => {
   if (!result) return;
+  saveBtn.disabled = true;
   try {
     const root = await window.showDirectoryPicker({ mode: "readwrite" });
     let written = 0;
@@ -379,9 +496,15 @@ saveBtn.onclick = async () => {
       await stream.close();
       written++;
     }
+    setStatus(`Записано файлов: ${written}`, "done");
     log(`\nЗаписано файлов: ${written}`);
   } catch (e) {
-    if (e.name !== "AbortError") log(`\nНе удалось сохранить: ${e.message}`);
+    if (e.name !== "AbortError") {
+      setStatus(`Не удалось сохранить: ${e.message}`, "error");
+      log(`\nНе удалось сохранить: ${e.message}`);
+    }
+  } finally {
+    saveBtn.disabled = !result;
   }
 };
 
@@ -396,7 +519,7 @@ zipBtn.onclick = () => {
 };
 
 /* ------------------------------------------------- ввод -------------------- */
-document.getElementById("pick").onclick = () => input.click();
+el("pick").onclick = () => input.click();
 
 input.onchange = () => {
   const files = [...input.files];
@@ -418,7 +541,7 @@ drop.addEventListener("drop", async (e) => {
   const entries = [...e.dataTransfer.items]
     .map(item => item.webkitGetAsEntry?.()).filter(Boolean);
   if (!entries.length) {
-    log("Браузер не отдал содержимое. Попробуйте кнопку \"Выбрать папку\".");
+    setStatus('Браузер не отдал содержимое. Нажмите "Выбрать папку".', "error");
     return;
   }
   const folder = entries.find(en => en.isDirectory);
@@ -427,6 +550,10 @@ drop.addEventListener("drop", async (e) => {
   for (const entry of entries) await walk(entry, files);
   run(files);
 });
+
+// чтобы промах мимо зоны не открывал файл в браузере
+["dragover", "drop"].forEach(type =>
+  window.addEventListener(type, (e) => { if (!drop.contains(e.target)) e.preventDefault(); }));
 
 window.addEventListener("unhandledrejection", (e) =>
   log(`Сбой: ${e.reason?.message || e.reason}`));
