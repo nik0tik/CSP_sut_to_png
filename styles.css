@@ -385,3 +385,141 @@ details.log summary:hover { color: var(--text); }
     animation: none !important;
   }
 }
+
+/* ---------- справка ---------- */
+
+.help {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 4px 22px;
+  margin-bottom: 18px;
+}
+
+.help > summary {
+  cursor: pointer;
+  padding: 16px 0;
+  font-size: .95rem;
+  font-weight: 550;
+  color: var(--text);
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.help > summary::-webkit-details-marker { display: none; }
+
+.help > summary::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid var(--accent);
+  border-bottom: 2px solid var(--accent);
+  transform: rotate(-45deg);
+  transition: transform .16s ease;
+  flex: none;
+}
+
+.help[open] > summary::before { transform: rotate(45deg); }
+
+.help > summary:hover { color: var(--accent-strong); }
+
+.help > summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+.help-body {
+  padding-bottom: 8px;
+  font-size: .92rem;
+  color: var(--text-dim);
+  max-width: 62ch;
+}
+
+.help-body h3 {
+  margin: 26px 0 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -.01em;
+}
+
+.help-body h4 {
+  margin: 18px 0 6px;
+  font-size: .9rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.help-body h3:first-child { margin-top: 4px; }
+
+.help-body p { margin: 0 0 10px; }
+
+.help-body ol,
+.help-body ul { margin: 0 0 12px; padding-left: 20px; }
+
+.help-body li { margin-bottom: 5px; }
+
+.help-body strong { color: var(--text); font-weight: 600; }
+
+.help-body code {
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font: .85em/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.help-body a {
+  color: var(--accent-strong);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+.help-body a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+.help-body hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 22px 0;
+}
+
+.help-body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 14px;
+  font-size: .88rem;
+}
+
+.help-body th,
+.help-body td {
+  text-align: left;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+.help-body th {
+  color: var(--text);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.help-body tr:last-child td { border-bottom: 0; }
+
+.note {
+  margin: 0 0 12px;
+  padding: 11px 14px;
+  border-radius: 9px;
+  border-left: 3px solid var(--accent);
+  background: var(--accent-soft);
+}
+
+.note :last-child { margin-bottom: 0; }
