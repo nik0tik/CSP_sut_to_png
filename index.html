@@ -3,17 +3,342 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Извлечение картинок из кистей Clip Studio Paint</title>
-<link rel="stylesheet" href="styles.css">
+<title>Картинки из кистей CSP и Procreate</title>
+<style>
+:root {
+  --accent: #12a37a;
+  --accent-soft: rgba(18, 163, 122, .12);
+  --accent-strong: #0d8664;
+  --bg: #f6f7f9;
+  --panel: #ffffff;
+  --text: #1a1d21;
+  --text-dim: #5b636e;
+  --line: #e2e5ea;
+  --shadow: 0 1px 2px rgba(16, 24, 40, .05), 0 8px 24px rgba(16, 24, 40, .06);
+  --radius: 14px;
+  --danger: #c0392b;
+  --warn: #b26a00;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --accent: #2dd4a7;
+    --accent-soft: rgba(45, 212, 167, .14);
+    --accent-strong: #4ee0b8;
+    --bg: #14171b;
+    --panel: #1c2025;
+    --text: #e8eaed;
+    --text-dim: #9aa3ae;
+    --line: #2c3238;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .25);
+    --danger: #ff8a7a;
+    --warn: #ffc46b;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 48px 20px 72px;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap { max-width: 720px; margin: 0 auto; }
+
+.head { margin-bottom: 28px; }
+
+.head h1 {
+  margin: 0 0 6px;
+  font-size: 1.65rem;
+  font-weight: 650;
+  letter-spacing: -.02em;
+}
+
+.head p { margin: 0; color: var(--text-dim); font-size: .93rem; max-width: 56ch; }
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 14px;
+  padding: 4px 11px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: .78rem;
+  font-weight: 550;
+}
+
+.badge::before {
+  content: "";
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 22px;
+  margin-bottom: 18px;
+}
+
+#drop {
+  border: 2px dashed var(--line);
+  border-radius: var(--radius);
+  padding: 40px 24px;
+  text-align: center;
+  background: var(--panel);
+  transition: border-color .16s ease, background .16s ease, transform .16s ease;
+}
+
+#drop.over { border-color: var(--accent); background: var(--accent-soft); transform: scale(1.008); }
+#drop.busy { opacity: .6; pointer-events: none; }
+
+#drop svg { width: 42px; height: 42px; color: var(--accent); margin-bottom: 12px; }
+#drop .title { margin: 0 0 4px; font-size: 1.02rem; font-weight: 550; }
+#drop .hint { margin: 0 0 18px; color: var(--text-dim); font-size: .87rem; }
+
+.pick-row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+
+code {
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font: .85em/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+button {
+  font: inherit;
+  font-weight: 550;
+  padding: 10px 20px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+  transition: background .14s ease, border-color .14s ease, opacity .14s ease;
+}
+
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { opacity: .4; cursor: default; }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.primary:hover:not(:disabled) { background: var(--accent-strong); border-color: var(--accent-strong); }
+
+@media (prefers-color-scheme: dark) { .primary { color: #0d1114; } }
+
+.actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+.opts {
+  display: flex;
+  gap: 10px 26px;
+  flex-wrap: wrap;
+  align-items: center;
+  font-size: .9rem;
+  color: var(--text-dim);
+}
+
+.opts label { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+
+.opts input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+
+.opts input[type="number"] {
+  width: 4.6em;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: .9rem;
+}
+
+.opts input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+#progressWrap[hidden] { display: none; }
+
+.progress {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.progress > span {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  transition: width .18s ease;
+}
+
+#status { margin: 0; font-size: .9rem; color: var(--text-dim); min-height: 1.4em; }
+#status.error { color: var(--danger); }
+#status.warn { color: var(--warn); }
+#status.done { color: var(--accent-strong); font-weight: 550; }
+
+#stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 12px;
+  margin: 18px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+#stats[hidden] { display: none; }
+
+#stats li { padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); }
+
+#stats b { display: block; font-size: 1.5rem; font-weight: 620; letter-spacing: -.02em; line-height: 1.2; }
+#stats span { font-size: .8rem; color: var(--text-dim); }
+
+#preview { margin: 18px 0 0; }
+#preview[hidden] { display: none; }
+
+#preview h2 { margin: 0 0 10px; font-size: .88rem; font-weight: 550; color: var(--text-dim); }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 8px; }
+
+.grid img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: contain;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 4px;
+  background-color: #fff;
+  background-image:
+    linear-gradient(45deg, #e6e8eb 25%, transparent 25%, transparent 75%, #e6e8eb 75%),
+    linear-gradient(45deg, #e6e8eb 25%, transparent 25%, transparent 75%, #e6e8eb 75%);
+  background-size: 12px 12px;
+  background-position: 0 0, 6px 6px;
+}
+
+.actions { margin-top: 20px; }
+
+details.log { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 20px; }
+
+details.log summary { cursor: pointer; font-size: .88rem; color: var(--text-dim); font-weight: 550; }
+details.log summary:hover { color: var(--text); }
+details.log summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+
+#log {
+  margin: 12px 0 0;
+  max-height: 300px;
+  overflow: auto;
+  padding: 12px 14px;
+  border-radius: 9px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+  color: var(--text-dim);
+}
+
+#log:empty { display: none; }
+
+.help {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 4px 22px;
+  margin-bottom: 18px;
+}
+
+.help > summary {
+  cursor: pointer;
+  padding: 16px 0;
+  font-size: .95rem;
+  font-weight: 550;
+  color: var(--text);
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.help > summary::-webkit-details-marker { display: none; }
+
+.help > summary::before {
+  content: "";
+  width: 7px; height: 7px;
+  border-right: 2px solid var(--accent);
+  border-bottom: 2px solid var(--accent);
+  transform: rotate(-45deg);
+  transition: transform .16s ease;
+  flex: none;
+}
+
+.help[open] > summary::before { transform: rotate(45deg); }
+.help > summary:hover { color: var(--accent-strong); }
+.help > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 6px; }
+
+.help-body { padding-bottom: 8px; font-size: .92rem; color: var(--text-dim); max-width: 62ch; }
+
+.help-body h3 { margin: 26px 0 8px; font-size: 1rem; font-weight: 600; color: var(--text); letter-spacing: -.01em; }
+.help-body h4 { margin: 18px 0 6px; font-size: .9rem; font-weight: 600; color: var(--text); }
+.help-body h3:first-child { margin-top: 4px; }
+.help-body p { margin: 0 0 10px; }
+.help-body ol, .help-body ul { margin: 0 0 12px; padding-left: 20px; }
+.help-body li { margin-bottom: 5px; }
+.help-body strong { color: var(--text); font-weight: 600; }
+
+.help-body a { color: var(--accent-strong); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+.help-body a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+
+.help-body hr { border: 0; border-top: 1px solid var(--line); margin: 22px 0; }
+
+.help-body table { width: 100%; border-collapse: collapse; margin: 0 0 14px; font-size: .88rem; }
+
+.help-body th, .help-body td {
+  text-align: left;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+.help-body th { color: var(--text); font-weight: 600; white-space: nowrap; }
+.help-body tr:last-child td { border-bottom: 0; }
+
+.note {
+  margin: 0 0 12px;
+  padding: 11px 14px;
+  border-radius: 9px;
+  border-left: 3px solid var(--accent);
+  background: var(--accent-soft);
+}
+
+.note :last-child { margin-bottom: 0; }
+
+.foot { margin-top: 26px; font-size: .82rem; color: var(--text-dim); text-align: center; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}
+</style>
 </head>
 <body>
 <div class="wrap">
 
   <header class="head">
-    <span class="badge">Сделано Nikotik</span>
-    <h1>Картинки из кистей Clip Studio Paint</h1>
-    <p>Перетащите папку с файлами <code>.sut</code> — каждая кисть получит
-       отдельную подпапку с PNG.</p>
+    <span class="badge">Сделано Nikotik для любимых булочек. Чистый нефильтрованный вайбкодинг.</span>
+    <h1>Картинки из кистей CSP и Procreate</h1>
+    <p>Перетащите папку с файлами <code>.sut</code> (Clip Studio Paint) или
+       <code>.brushset</code> (Procreate) — каждая кисть получит отдельную
+       подпапку с PNG.</p>
   </header>
 
   <div id="drop">
@@ -23,16 +348,20 @@
       <path d="M12 11v6"/><path d="M9.5 13.5 12 11l2.5 2.5"/>
     </svg>
     <p class="title">Перетащите папку сюда</p>
-    <p class="hint">или выберите её вручную</p>
-    <button id="pick" type="button" class="primary">Выбрать папку</button>
+    <p class="hint">или выберите вручную</p>
+    <div class="pick-row">
+      <button id="pick" type="button" class="primary">Выбрать папку</button>
+      <button id="pickFiles" type="button">Выбрать файлы .sut / .brushset</button>
+    </div>
     <input id="input" type="file" webkitdirectory multiple hidden>
+    <input id="inputFiles" type="file" accept=".sut,.brushset" multiple hidden>
   </div>
 
   <section class="panel">
     <div class="opts">
       <label>
         <input id="deep" type="checkbox">
-        искать во всех таблицах
+        искать во всех таблицах (только для .sut)
       </label>
       <label>
         пропускать меньше
@@ -60,7 +389,7 @@
     </div>
 
     <div class="actions">
-      <button id="save" type="button" class="primary" disabled>Сохранить в папку…</button>
+      <button id="save" type="button" class="primary" disabled>Сохранить в папку</button>
       <button id="zip" type="button" disabled>Скачать ZIP</button>
     </div>
 
@@ -69,25 +398,31 @@
       <pre id="log"></pre>
     </details>
   </section>
+
   <details class="help">
     <summary>Как этим пользоваться и что означают настройки</summary>
     <div class="help-body">
 
       <h3>Что это делает</h3>
-      <p>Файл <code>.sut</code> — это база данных SQLite, внутри которой лежат
-         настройки кисти и её картинки: наконечники (brush tips), текстуры,
-         превью. Инструмент открывает базу, находит внутри все целые PNG и
-         складывает их в понятную структуру папок.</p>
+      <p>Инструмент извлекает PNG из файлов кистей двух форматов:</p>
+      <ul>
+        <li><code>.sut</code> — база данных SQLite с настройками и картинками
+            кистей Clip Studio Paint (наконечники, текстуры, превью)</li>
+        <li><code>.brushset</code> — ZIP-архив с кистями Procreate, внутри
+            каждой кисти есть файл <code>shape.png</code></li>
+      </ul>
       <p>Что он <strong>не</strong> делает: не вытаскивает настройки кисти, не
-         создаёт <code>.txt</code> и <code>.sql</code>, не меняет ваши файлы
-         <code>.sut</code> и не превращает картинки обратно в кисть. На выходе
-         только PNG.</p>
+         создаёт <code>.txt</code> и <code>.sql</code>, не меняет ваши исходные
+         файлы и не превращает картинки обратно в кисть. На выходе только PNG.</p>
       <div class="note">
-        <p>Нужно вытащить из кисти вообще всё, а не только картинки?
-           Воспользуйтесь
+        <p><strong>Нужны другие форматы?</strong></p>
+        <p>Для полного извлечения данных из <code>.sut</code> воспользуйтесь
            <a href="https://morrowshore.com/tool/csp-extractor/"
               target="_blank" rel="noopener noreferrer">Clip Studio Brush
            Extractor</a>.</p>
+        <p>Для кистей Photoshop (<code>.abr</code>) — конвертер
+           <a href="https://jlai.github.io/brush-viewer/"
+              target="_blank" rel="noopener noreferrer">ABR Brush Viewer</a>.</p>
       </div>
 
       <hr>
@@ -95,7 +430,8 @@
       <h3>Быстрый старт</h3>
       <ol>
         <li>Перетащите папку с кистями в пунктирную рамку выше.
-            Или нажмите <strong>Выбрать папку</strong> и укажите её вручную.</li>
+            Или нажмите <strong>Выбрать папку</strong> / <strong>Выбрать
+            файлы</strong> и укажите вручную.</li>
         <li>Дождитесь, пока полоса прогресса дойдёт до конца — под ней появятся
             цифры и превью найденных картинок.</li>
         <li>Нажмите <strong>Сохранить в папку</strong> (Chrome, Edge) или
@@ -107,15 +443,15 @@
 
       <h3>Настройки</h3>
 
-      <h4>Искать во всех таблицах</h4>
+      <h4>Искать во всех таблицах (только для .sut)</h4>
       <p>По умолчанию инструмент читает только то место, где Clip Studio хранит
          наконечники кисти.</p>
       <p>Включите галочку, если из какой-то кисти ничего не извлеклось. Тогда
          просматриваются все таблицы базы целиком — находится больше, но вместе
          с наконечниками попадут текстуры бумаги, альфа-маски (выглядят как
          простые серые формы) и мелкие превью для панели инструментов.</p>
-      <p>Порядок действий обычно такой: сначала попробуйте без галочки, и только
-         если результат пустой — с галочкой.</p>
+      <p>На файлы <code>.brushset</code> эта настройка не влияет: там всегда
+         читается только <code>shape.png</code>.</p>
 
       <h4>Пропускать меньше N px</h4>
       <p>Отсекает картинки, у которых любая сторона меньше указанного числа
@@ -143,7 +479,7 @@
         </thead>
         <tbody>
           <tr><td>картинок</td><td>всего PNG готово к сохранению</td></tr>
-          <tr><td>кистей</td><td>из скольких <code>.sut</code> что-то извлеклось</td></tr>
+          <tr><td>кистей</td><td>из скольких файлов что-то извлеклось</td></tr>
           <tr><td>без картинок</td><td>файлы, где не нашлось ни одного PNG</td></tr>
           <tr><td>отсеяно</td><td>отброшено фильтром по размеру</td></tr>
           <tr><td>с ошибками</td><td>файлы, которые не удалось прочитать</td></tr>
@@ -167,6 +503,14 @@
 
       <h3>Важно</h3>
       <ul>
+        <li>Для <code>.sut</code>: рядом с этой страницей должен лежать файл
+            <code>sql-asm.js</code>. Без него инструмент переходит в упрощённый
+            режим и находит далеко не всё.</li>
+        <li>Для <code>.brushset</code>: без интернета не работает, нужна
+            библиотека JSZip с CDN.</li>
+        <li>Кнопка <strong>Сохранить в папку</strong> есть только в Chrome и
+            Edge. В остальных браузерах пользуйтесь ZIP — структура папок внутри
+            архива та же.</li>
         <li>Ничего не сохраняется между сессиями. Закрыли страницу — результат
             исчез, надо обрабатывать заново.</li>
         <li>На телефонах и планшетах выбор папки работает плохо или не работает
@@ -182,9 +526,9 @@
 
 </div>
 
-<script src="vendor/sql-wasm.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" integrity="sha512-XMVd28F1oH/O71fzwBnV7HucLxVwtxf26XV8P4wPk26EDxuGZ91N8bsOttmnomcCD3CS5ZMRL50H0GgOHvegtg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="sql-asm.js"></script>
 <script>
-const WASM_DIR = "vendor/";
 const PNG_SIG = [0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a];
 const PREVIEW_LIMIT = 24;
 
@@ -193,9 +537,9 @@ const logBox = el("log"), statusBox = el("status"), bar = el("bar");
 const progressWrap = el("progressWrap"), statsBox = el("stats");
 const previewBox = el("preview"), grid = el("grid"), previewTitle = el("previewTitle");
 const saveBtn = el("save"), zipBtn = el("zip");
-const drop = el("drop"), input = el("input");
+const drop = el("drop"), input = el("input"), inputFiles = el("inputFiles");
 
-let result = null;          // [{path, bytes}]
+let result = null;
 let previewUrls = [];
 let rootName = "brushes";
 let busy = false;
@@ -228,7 +572,7 @@ function readPng(data, start) {
     const length = view.getUint32(pos);
     const t = [data[pos+4], data[pos+5], data[pos+6], data[pos+7]];
     if (!t.every(isAlpha)) return null;
-    const end = pos + 8 + length + 4;          // данные + 4 байта CRC
+    const end = pos + 8 + length + 4;
     if (end > data.length) return null;
     const type = String.fromCharCode(...t);
     if (type === "IHDR") {
@@ -274,9 +618,7 @@ function blobsFrom(db, deep) {
     try {
       push(db.exec("SELECT FileData FROM MaterialFile"));
       return blobs;
-    } catch (e) {
-      // нет MaterialFile.FileData — уходим в общий обход
-    }
+    } catch (e) {}
   }
   let names;
   try { names = db.exec("SELECT name FROM sqlite_master WHERE type='table'"); }
@@ -284,13 +626,12 @@ function blobsFrom(db, deep) {
   if (!names.length) return blobs;
   for (const [table] of names[0].values) {
     try { push(db.exec(`SELECT * FROM "${String(table).replace(/"/g, '""')}"`)); }
-    catch (e) { /* нечитаемую таблицу пропускаем */ }
+    catch (e) {}
   }
   return blobs;
 }
 
 function fingerprint(bytes) {
-  // FNV-1a в двух вариантах + длина: хватает, чтобы отсеять дубли
   let h1 = 0x811c9dc5, h2 = 0x01000193;
   for (let i = 0; i < bytes.length; i++) {
     h1 = Math.imul(h1 ^ bytes[i], 0x01000193) >>> 0;
@@ -302,13 +643,13 @@ function fingerprint(bytes) {
 function extract(SQL, bytes, deep, minSide) {
   let blobs = [];
   const head = String.fromCharCode(...bytes.subarray(0, 15));
-  if (head === "SQLite format 3") {
+  if (SQL && head === "SQLite format 3") {
     let db = null;
     try { db = new SQL.Database(bytes); blobs = blobsFrom(db, deep); }
     catch (e) { blobs = []; }
     finally { if (db) try { db.close(); } catch (e) {} }
   }
-  if (!blobs.length) blobs = [bytes];   // не база — ищем по всему файлу
+  if (!blobs.length) blobs = [bytes];
 
   const images = [], seen = new Set();
   let skipped = 0;
@@ -322,6 +663,39 @@ function extract(SQL, bytes, deep, minSide) {
     }
   }
   return { images, skipped };
+}
+
+/* ------------------------------------------------- чтение .brushset -------- */
+async function extractBrushset(bytes) {
+  if (!window.JSZip) {
+    throw new Error("Библиотека JSZip не загрузилась — .brushset не читается.");
+  }
+  const zip = await JSZip.loadAsync(bytes);
+  const images = [], seen = new Set();
+
+  for (const [path, entry] of Object.entries(zip.files)) {
+    if (entry.dir || !/\/shape\.png$/i.test(path)) continue;
+    const parts = path.split("/").filter(Boolean);
+    if (parts.length < 2) continue;
+    const brushName = parts[parts.length - 2];
+    const pngBytes = await entry.async("uint8array");
+    
+    const png = readPng(pngBytes, 0);
+    if (!png) continue;
+    
+    const key = fingerprint(png.bytes);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    
+    images.push({
+      bytes: png.bytes,
+      width: png.width,
+      height: png.height,
+      name: brushName
+    });
+  }
+
+  return { images, skipped: 0 };
 }
 
 /* ------------------------------------------------- имена ------------------- */
@@ -366,9 +740,9 @@ function buildZip(entries) {
     const local = new DataView(new ArrayBuffer(30));
     local.setUint32(0, 0x04034b50, true);
     local.setUint16(4, 20, true);
-    local.setUint16(6, 0x0800, true);   // UTF-8 в именах: нужно для кириллицы
-    local.setUint16(8, 0, true);        // метод 0 — без сжатия
-    local.setUint16(12, 0x21, true);    // дата 1980-01-01
+    local.setUint16(6, 0x0800, true);
+    local.setUint16(8, 0, true);
+    local.setUint16(12, 0x21, true);
     local.setUint32(14, crc, true);
     local.setUint32(18, size, true);
     local.setUint32(22, size, true);
@@ -403,17 +777,20 @@ function buildZip(entries) {
 }
 
 /* ------------------------------------------------- сбор файлов ------------- */
-async function walk(entry, out) {
-  if (entry.isFile) {
-    if (!/\.sut$/i.test(entry.name)) return;
-    out.push(await new Promise((res, rej) => entry.file(res, rej)));
-    return;
-  }
+async function walkDir(entry, out, rel) {
   const reader = entry.createReader();
   for (;;) {
     const batch = await new Promise((res, rej) => reader.readEntries(res, rej));
-    if (!batch.length) break;            // содержимое отдаётся порциями
-    for (const child of batch) await walk(child, out);
+    if (!batch.length) break;
+    for (const child of batch) {
+      if (child.isDirectory) {
+        const name = safeFolder(child.name);
+        await walkDir(child, out, rel ? `${rel}/${name}` : name);
+      } else if (/\.(sut|brushset)$/i.test(child.name)) {
+        const file = await new Promise((res, rej) => child.file(res, rej));
+        out.push({ file, rel });
+      }
+    }
   }
 }
 
@@ -459,7 +836,7 @@ function renderPreview(entries) {
 }
 
 /* ------------------------------------------------- основной проход --------- */
-async function run(files) {
+async function run(items) {
   if (busy) return;
   busy = true;
   drop.classList.add("busy");
@@ -471,100 +848,127 @@ async function run(files) {
   clearPreview();
 
   try {
-    const suts = files.filter(f => /\.sut$/i.test(f.name));
-    if (!suts.length) {
-      setStatus("Файлы .sut не найдены. Проверьте, что выбрана нужная папка.", "error");
+    const files = items.filter(it => /\.(sut|brushset)$/i.test(it.file.name));
+    if (!files.length) {
+      setStatus("Файлы .sut или .brushset не найдены.", "error");
       return;
     }
 
     const deep = el("deep").checked;
     const minSide = Number(el("min").value) || 0;
 
-    if (typeof initSqlJs !== "function") {
-      setStatus("Движок sql.js не загрузился.", "error");
-      log("Проверьте, что рядом с index.html лежит папка vendor");
-      log("с файлами sql-wasm.js и sql-wasm.wasm.");
-      return;
-    }
-
-    setStatus("Готовим движок…");
+    setStatus("Готовим движки…");
     progressWrap.hidden = false;
-    setProgress(0, suts.length);
+    setProgress(0, files.length);
     await breathe();
 
-    let SQL;
-    try {
-      SQL = await initSqlJs({ locateFile: (f) => WASM_DIR + f });
-    } catch (e) {
-      setStatus("Не удалось запустить sql.js.", "error");
-      log(e.message);
-      log("Если открыли index.html двойным кликом — так не работает,");
-      log("страницу нужно открывать по адресу сайта.");
-      return;
+    let SQL = null;
+    if (typeof initSqlJs === "function") {
+      try { SQL = await initSqlJs(); }
+      catch (e) { log(`Движок sql.js не запустился: ${e.message}`); }
     }
 
-    log(`Найдено кистей: ${suts.length}`);
+    if (!SQL) {
+      log("ВНИМАНИЕ: работаю в упрощённом режиме для .sut.");
+      log("Файл sql-asm.js не найден или не запустился, поэтому базы кистей");
+      log("не читаются как базы — идёт простой поиск картинок по всему файлу.");
+      log("Крупные наконечники при этом обычно НЕ находятся: внутри базы они");
+      log("разрезаны на части, собрать их без движка невозможно.");
+      log("Положите sql-asm.js рядом с index.html и обновите страницу.\n");
+    }
+
+    log(`Найдено файлов: ${files.length}`);
     if (minSide) log(`Пропуск картинок меньше ${minSide} px`);
     log();
 
     const out = [], usedDirs = new Set();
+    const root = `${rootName}_extracted`;
     let total = 0, empty = 0, skippedAll = 0, failed = 0;
-    const step = suts.length > 150 ? 5 : 1;
+    const step = files.length > 150 ? 5 : 1;
 
-    for (let i = 0; i < suts.length; i++) {
-      const file = suts[i];
-      const label = `[${i + 1}/${suts.length}] ${file.name}`;
+    for (let i = 0; i < files.length; i++) {
+      const { file, rel } = files[i];
+      const shownPath = rel ? `${rel}/${file.name}` : file.name;
+      const label = `[${i + 1}/${files.length}] ${shownPath}`;
       let images, skipped;
+      
       try {
         const bytes = new Uint8Array(await file.arrayBuffer());
-        ({ images, skipped } = extract(SQL, bytes, deep, minSide));
+        
+        if (/\.brushset$/i.test(file.name)) {
+          ({ images, skipped } = await extractBrushset(bytes));
+        } else {
+          ({ images, skipped } = extract(SQL, bytes, deep, minSide));
+        }
       } catch (e) {
         failed++;
         log(`${label} — ошибка: ${e.message}`);
         continue;
       }
+      
       skippedAll += skipped;
 
       if (!images.length) {
         empty++;
         log(`${label} — картинок нет${skipped ? ` (отсеяно: ${skipped})` : ""}`);
       } else {
+        const isBrushset = /\.brushset$/i.test(file.name);
         const stem = safeStem(file.name);
-        const folder = uniqueName(stem, usedDirs);
-        images.forEach((png, index) => {
-          const name = images.length === 1 ? `${stem}.png` : `${stem}_${index + 1}.png`;
-          out.push({
-            path: `${rootName}_extracted/${folder}/${name}`,
-            bytes: png.bytes.slice()      // копия, чтобы отпустить буфер файла
+        const parent = rel ? `${root}/${rel}` : root;
+        
+        if (isBrushset) {
+          images.forEach((png) => {
+            const brushFolder = `${parent}/${safeStem(png.name || stem)}`;
+            const folder = uniqueName(brushFolder, usedDirs);
+            out.push({
+              path: `${folder}/${safeStem(png.name || stem)}.png`,
+              bytes: png.bytes.slice()
+            });
           });
-        });
+        } else {
+          const folder = uniqueName(`${parent}/${stem}`, usedDirs);
+          images.forEach((png, index) => {
+            const name = images.length === 1 ? `${stem}.png` : `${stem}_${index + 1}.png`;
+            out.push({
+              path: `${folder}/${name}`,
+              bytes: png.bytes.slice()
+            });
+          });
+        }
+        
         total += images.length;
         log(`${label} — ${images.length} шт. ` +
             `[${images.map(p => p.width + "x" + p.height).join(", ")}]`);
       }
 
-      setProgress(i + 1, suts.length);
+      setProgress(i + 1, files.length);
       if (i % step === step - 1) {
-        setStatus(`Обработано ${i + 1} из ${suts.length}…`);
+        setStatus(`Обработано ${i + 1} из ${files.length}…`);
         await breathe();
       }
     }
 
     log("\n" + "-".repeat(46));
     log(`Картинок извлечено: ${total}`);
-    log(`Кистей обработано:  ${suts.length - empty - failed} из ${suts.length}`);
+    log(`Файлов обработано:  ${files.length - empty - failed} из ${files.length}`);
     if (empty) log(`Без картинок:       ${empty}`);
     if (skippedAll) log(`Отсеяно по размеру: ${skippedAll}`);
     if (failed) log(`С ошибками:         ${failed}`);
 
-    const stats = [[total, "картинок"], [suts.length - empty - failed, "кистей"]];
+    const stats = [[total, "картинок"], [files.length - empty - failed, "кистей"]];
     if (empty) stats.push([empty, "без картинок"]);
     if (skippedAll) stats.push([skippedAll, "отсеяно"]);
     if (failed) stats.push([failed, "с ошибками"]);
     renderStats(stats);
 
     if (!total) {
-      setStatus("Картинок не нашлось. Попробуйте включить поиск во всех таблицах.", "error");
+      if (!SQL) {
+        setStatus("Ничего не нашлось. Нужен файл sql-asm.js рядом со страницей — " +
+                  "подробности в отчёте.", "error");
+      } else {
+        setStatus("Картинок не нашлось. Попробуйте включить поиск во всех таблицах " +
+                  "(для .sut).", "error");
+      }
       return;
     }
 
@@ -572,8 +976,13 @@ async function run(files) {
     renderPreview(out);
     zipBtn.disabled = false;
 
-    if (window.showDirectoryPicker) {
-      saveBtn.disabled = false;
+    const canSave = Boolean(window.showDirectoryPicker);
+    if (canSave) saveBtn.disabled = false;
+
+    if (!SQL) {
+      setStatus(`Упрощённый режим: ${total} картинок, но часть наверняка ` +
+                `не найдена. Смотрите отчёт.`, "warn");
+    } else if (canSave) {
       setStatus(`Готово: ${total} картинок в ${usedDirs.size} папках.`, "done");
     } else {
       setStatus(`Готово: ${total} картинок. Скачайте ZIP — папки внутри те же.`, "done");
@@ -628,13 +1037,30 @@ zipBtn.onclick = () => {
 
 /* ------------------------------------------------- ввод -------------------- */
 el("pick").onclick = () => input.click();
+el("pickFiles").onclick = () => inputFiles.click();
 
 input.onchange = () => {
-  const files = [...input.files];
-  const rel = files.find(f => f.webkitRelativePath)?.webkitRelativePath;
-  if (rel) rootName = safeFolder(rel.split("/")[0]);
-  run(files);
+  const files = [...input.files].filter(f => /\.(sut|brushset)$/i.test(f.name));
+  const items = [];
+  let rootSet = false;
+  for (const file of files) {
+    const parts = (file.webkitRelativePath || file.name).split("/");
+    if (!rootSet && parts.length > 1) {
+      rootName = safeFolder(parts[0]);
+      rootSet = true;
+    }
+    const rel = parts.slice(1, -1).map(safeFolder).filter(Boolean).join("/");
+    items.push({ file, rel });
+  }
+  run(items);
   input.value = "";
+};
+
+inputFiles.onchange = () => {
+  const files = [...inputFiles.files].filter(f => /\.(sut|brushset)$/i.test(f.name));
+  if (files.length) rootName = "brushes";
+  run(files.map(file => ({ file, rel: "" })));
+  inputFiles.value = "";
 };
 
 ["dragenter", "dragover"].forEach(type => drop.addEventListener(type, (e) => {
@@ -652,20 +1078,35 @@ drop.addEventListener("drop", async (e) => {
     setStatus('Браузер не отдал содержимое. Нажмите "Выбрать папку".', "error");
     return;
   }
-  const folder = entries.find(en => en.isDirectory);
-  if (folder) rootName = safeFolder(folder.name);
-  const files = [];
-  for (const entry of entries) await walk(entry, files);
-  run(files);
+
+  const items = [];
+  let rootSet = false;
+  for (const entry of entries) {
+    if (entry.isDirectory) {
+      if (!rootSet) { rootName = safeFolder(entry.name); rootSet = true; }
+      await walkDir(entry, items, "");
+    } else if (/\.(sut|brushset)$/i.test(entry.name)) {
+      const file = await new Promise((res, rej) => entry.file(res, rej));
+      items.push({ file, rel: "" });
+    }
+  }
+  if (!rootSet) rootName = "brushes";
+  run(items);
 });
 
-// чтобы промах мимо зоны не открывал файл в браузере
 ["dragover", "drop"].forEach(type =>
   window.addEventListener(type, (e) => { if (!drop.contains(e.target)) e.preventDefault(); }));
 
 window.addEventListener("unhandledrejection", (e) =>
   log(`Сбой: ${e.reason?.message || e.reason}`));
-window.addEventListener("error", (e) => log(`Сбой: ${e.message}`));
+window.addEventListener("error", (e) => {
+  if (e.target && e.target.tagName === "SCRIPT") return;
+  log(`Сбой: ${e.message}`);
+});
+
+if (location.protocol === "file:" && !window.showDirectoryPicker) {
+  setStatus("Открыто как локальный файл — результат забирайте кнопкой ZIP.");
+}
 </script>
 </body>
 </html>
